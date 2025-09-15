@@ -1,0 +1,44 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+::-webkit-scrollbar {
+    @apply w-2;
+    /* 8px */
+}
+
+::-webkit-scrollbar-track {
+    @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+}
+
+/* --- Dark Mode Styles for Webkit --- */
+.dark ::-webkit-scrollbar-thumb {
+    @apply bg-gray-600;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+}
+
+
+/* === For Firefox === */
+/* 
+  Firefox supports a newer, simpler standard.
+  We target the 'html' element to apply this globally.
+*/
+html {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.gray.300') transparent;
+}
+
+/* --- Dark Mode Styles for Firefox --- */
+.dark html {
+    scrollbar-color: theme('colors.gray.600') transparent;
+}
