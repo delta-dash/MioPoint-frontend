@@ -103,19 +103,32 @@
 					{#if scene.transcript}
 						<p class="mb-4 whitespace-pre-wrap text-slate-600">{scene.transcript}</p>
 					{/if}
-					{#if scene.tags?.length > 0}
-						<div class="mt-4 flex flex-wrap gap-2">
-							{#each scene.tags as tagObject}
-								<span
-									class="rounded-full px-2.5 py-1 text-xs font-medium transition-colors {tagObject.isMatch
-										? 'bg-yellow-300 font-semibold text-yellow-900'
-										: 'bg-blue-100 text-blue-800'}"
-								>
-									{tagObject.text}
-								</span>
-							{/each}
-						</div>
-					{/if}
+					<div class="after:content-[''] after:table after:clear-both">
+						{#if scene.tags?.length > 0}
+							<!-- Floated Image -->
+							<div class="float-right mb-2 ml-4 h-32 w-32">
+								<img
+									src="/api/scene/{scene.id}/thumbnail"
+									alt="Scene thumbnail"
+									class="h-full w-full rounded-lg object-cover shadow-md"
+									loading="lazy"
+								/>
+							</div>
+
+							<!-- Tags will wrap below/around the image -->
+							<div class="block">
+								{#each scene.tags as tagObject}
+									<span
+										class="inline-block rounded-full px-2.5 py-1 m-1 text-xs font-medium transition-colors {tagObject.isMatch
+											? 'bg-yellow-300 font-semibold text-yellow-900'
+											: 'bg-blue-100 text-blue-800'}"
+									>
+										{tagObject.text}
+									</span>
+								{/each}
+							</div>
+						{/if}
+					</div>
 				</div>
 			{/each}
 		</div>

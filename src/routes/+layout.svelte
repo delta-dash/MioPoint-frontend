@@ -3,6 +3,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import { wsStore } from '$lib/wsStore';
+	import PartyIndicator from '$lib/components/PartyIndicator.svelte';
 
 	let { children } = $props();
 
@@ -17,8 +18,6 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-
-
 <div class="flex h-screen overflow-hidden bg-white dark:bg-gray-900">
 	<Sidebar />
 
@@ -27,5 +26,6 @@
 	<main class="flex-grow overflow-y-auto">
 		{@render children?.()}
 	</main>
-</div>
 
+	<PartyIndicator />
+</div>

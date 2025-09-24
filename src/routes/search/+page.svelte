@@ -1,274 +1,159 @@
 <!-- src/routes/search/+page.svelte -->
 <script lang="ts">
-	// No longer need onMount here, so we remove it from the import
-	import { onDestroy } from 'svelte';
-	import { fade } from 'svelte/transition';
+	import { page } from '$app/state';
+	import Search from '$lib/components/Search.svelte';
 	import Card from '$lib/components/Card.svelte';
-	import { AlertCircleIcon, CheckCircleIcon, UploadCloudIcon } from 'svelte-feather-icons';
+	import Tabs from '$lib/components/Tabs.svelte';
+	import ReverseImageSearch from '$lib/components/ReverseImageSearch.svelte';
+	import MasonryGrid from '$lib/components/MasonryGrid.svelte';
+	import type { Tab } from '$lib/components/Tabs.svelte';
 
-	// Define a type for the API response for better autocompletion and safety.
-	type SearchResultItem = {
-		id: number;
-		display_name: string;
-		tags: string[];
-		scene_id: number | null;
-		similarity: string;
-		// ... add other fields from your API if needed
-	};
+	// 1. IMPORT the centralized store.
+	import { searchFiles , searchStore} from '$lib/searchStore';
 
-	type ApiResponse = {
-		search_context: {
-			match_type: 'precalculated_similarity' | 'live_clip_search' | 'none';
-			query_found_in_db: boolean;
-			message?: string;
-		};
-		results: {
-			total: number;
-			items: SearchResultItem[];
-		};
-	};
+	// The `data` prop is passed from the `load` function in `+page.ts`.
+	const { data } = $props();
 
-	// --- Component State ---
-	let selectedFile: File | null = null;
-	let previewUrl: string | null = null;
-	let searchResults: ApiResponse | null = null;
-	let isLoading = false;
-	let errorMessage: string | null = null;
+	// 2. INITIALIZE the store with the page's URL.
+	// This syncs the store's state with what the server rendered or the current URL.
+	// This should only happen once when the component is created.
+	searchStore.initialize(page.url);
 
-	// --- Event Handlers ---
+	// --- LOCAL DISPLAY STATE ---
+	// This state is for *displaying* the results, not for the search query itself.
+	let items = $state(data.initialResults.items);
+	let folders = $state(data.initialResults.folders);
+	let nextCursor = $state(data.initialResults.next_cursor);
+	let isLoadingMore = $state(false);
 
-	// Processes a file, sets the preview, and resets state.
-	function processFile(file: File) {
-		if (!file || !file.type.startsWith('image/')) {
-			errorMessage = 'Please select a valid image file.';
-			return;
-		}
+	let activeTabId = $state('media');
+	const TABS: Tab[] = [
+		{ id: 'media', label: 'Media Search' },
+		{ id: 'image', label: 'Image Search' }
+	];
 
-		// Clear previous results and errors
-		searchResults = null;
-		errorMessage = null;
-
-		// Revoke the old object URL to prevent memory leaks
-		if (previewUrl) {
-			URL.revokeObjectURL(previewUrl);
-		}
-
-		selectedFile = file;
-		previewUrl = URL.createObjectURL(selectedFile);
-	}
-
-	// Handles the file input change event
-	function handleFileSelect(event: Event) {
-		const input = event.target as HTMLInputElement;
-		if (input.files && input.files.length > 0) {
-			processFile(input.files[0]);
-		}
-	}
-
-	// Handles pasting an image from the clipboard
-	function handlePaste(event: ClipboardEvent) {
-		const items = event.clipboardData?.items;
-		if (!items) return;
-
-		// Find the first image item in the clipboard
-		for (const item of items) {
-			if (item.type.startsWith('image/')) {
-				const file = item.getAsFile();
-				if (file) {
-					event.preventDefault(); // Prevent default paste behavior
-					processFile(file);
-					break; // Use the first image found
-				}
-			}
-		}
-	}
-
-	// Performs the search by calling the backend API
-	async function handleSearch() {
-		if (!selectedFile) {
-			errorMessage = 'Please select an image file first.';
-			return;
-		}
-
-		isLoading = true;
-		errorMessage = null;
-		searchResults = null;
-
-		const formData = new FormData();
-		formData.append('file', selectedFile);
-
-		try {
-			const response = await fetch('/api/search/image?top_k=12', {
-				method: 'POST',
-				body: formData
-			});
-
-			if (!response.ok) {
-				const errorData = await response.json();
-				throw new Error(errorData.detail || 'An unknown error occurred during the search.');
-			}
-
-			searchResults = (await response.json()) as ApiResponse;
-		} catch (err) {
-			if (err instanceof Error) {
-				errorMessage = err.message;
-			} else {
-				errorMessage = 'An unexpected error occurred.';
-			}
-			console.error(err);
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	// --- Lifecycle Hooks ---
-
-	// We no longer need onMount or a manual removeEventListener.
-	// The <svelte:window> element handles this automatically.
-
-	// Clean up the object URL when the component is unmounted
-	onDestroy(() => {
-		if (previewUrl) {
-			URL.revokeObjectURL(previewUrl);
-		}
+	// --- REACTIVE DATA SYNC ---
+	// This effect is the crucial link. When the `searchStore` updates the URL,
+	// the `load` function re-runs, a new `data` object arrives, and this effect
+	// updates our local display state to match.
+	$effect(() => {
+		items = data.initialResults.items;
+		folders = data.initialResults.folders;
+		nextCursor = data.initialResults.next_cursor;
 	});
 
-	// --- Helper Computed Values ---
+	// --- USER ACTIONS ---
 
-	// Create a user-friendly message from the search context
-	$: contextMessage = (() => {
-		if (!searchResults?.search_context) return null;
-		const { match_type, query_found_in_db } = searchResults.search_context;
+	// The `handleSearch` function is no longer needed here!
+	// The Search component interacts directly with the searchStore.
 
-		if (match_type === 'precalculated_similarity') {
-			return 'Found an exact match in your library. Showing the most similar items.';
+	/** Fetches the next page of results for the current query. */
+	async function loadMore() {
+		if (!nextCursor || isLoadingMore) return;
+		isLoadingMore = true;
+
+		try {
+			// Use the query from the current page data for consistency.
+			const query = data.query;
+			const newResults = await searchFiles({ ...query, cursor: nextCursor });
+
+			items = [...items, ...newResults.items];
+			// Folders are typically only on the first page, so we don't append.
+			nextCursor = newResults.next_cursor;
+		} catch (error) {
+			console.error('Failed to load more results:', error);
+		} finally {
+			isLoadingMore = false;
 		}
-		if (match_type === 'live_clip_search' && query_found_in_db) {
-			return 'Found an exact match, but showing results from a live similarity search.';
-		}
-		if (match_type === 'live_clip_search') {
-			return 'Query image not in library. Showing results from a live similarity search.';
-		}
-		return null; // No special message needed for 'none' or other cases
-	})();
+	}
 </script>
 
-<!-- ✅ Add the SSR-safe window event listener here -->
-<svelte:window on:paste={handlePaste} />
+
+
 
 <div class="container mx-auto p-4 md:p-8">
-	<h1 class="mb-4 text-3xl font-bold text-gray-900 dark:text-white">Reverse Image Search</h1>
+	<h1 class="mb-4 text-3xl font-bold text-gray-900 dark:text-white">Search</h1>
 	<p class="mb-8 text-lg text-gray-600 dark:text-gray-400">
-		Upload an image to find visually similar items in your media library.
+		Find files by text, filters, or by uploading a similar image.
 	</p>
 
-	<!-- Search Panel -->
-	<div
-		class="flex flex-col rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800 md:col-span-1"
-	>
-		<!-- File Input -->
-		<label
-			for="file-upload"
-			class="mb-4 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 py-8 text-center transition hover:border-indigo-500 hover:bg-gray-50 dark:border-gray-600 dark:hover:border-indigo-400 dark:hover:bg-gray-700"
-		>
-			<svelte:component this={UploadCloudIcon} class="mb-2 h-10 w-10 text-gray-400" />
-			<span class="font-semibold text-indigo-600 dark:text-indigo-400">Click to upload</span>
-			<span class="text-sm text-gray-500 dark:text-gray-400"
-				>or drag & drop or paste image</span
-			>
-		</label>
-		<input id="file-upload" type="file" class="hidden" on:change={handleFileSelect} accept="image/*" />
-
-		<!-- Preview -->
-		{#if previewUrl}
-			<div transition:fade class="mt-4">
-				<p class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Preview:</p>
-				<img
-					src={previewUrl}
-					alt="Selected file preview"
-					class="max-h-60 w-full rounded-lg object-contain"
-				/>
-				<p class="mt-2 truncate text-xs text-gray-500" title={selectedFile?.name}>
-					{selectedFile?.name}
-				</p>
-			</div>
-		{/if}
-
-		<!-- Search Button -->
-		{#if selectedFile}
-			<button
-				transition:fade={{ duration: 150 }}
-				on:click={handleSearch}
-				disabled={isLoading}
-				class="mt-6 w-full rounded-lg bg-indigo-600 px-4 py-3 text-lg font-semibold text-white transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:focus:ring-offset-gray-900"
-			>
-				{#if isLoading}
-					Searching...
-				{:else}
-					Search
-				{/if}
-			</button>
-		{/if}
-	</div>
-
-	<!-- Divider -->
-	<hr class="my-8 border-gray-200 dark:border-gray-700" />
-
-	<!-- Results Section -->
-	<div class="min-h-[400px]">
-		{#if isLoading}
-			<div class="flex h-full items-center justify-center pt-16 text-gray-500">
-				<div
-					class="h-12 w-12 animate-spin rounded-full border-4 border-t-4 border-gray-200 border-t-indigo-500"
-				></div>
-			</div>
-		{:else if errorMessage}
-			<div
-				transition:fade
-				class="flex items-center rounded-lg bg-red-100 p-4 text-red-800 dark:bg-red-900/50 dark:text-red-300"
-			>
-				<svelte:component this={AlertCircleIcon} class="mr-3 h-5 w-5 flex-shrink-0" />
-				<div>{errorMessage}</div>
-			</div>
-		{:else if searchResults}
-			<div transition:fade>
-				<!-- Search Context Message -->
-				{#if contextMessage}
-					<div
-						class="mb-6 flex items-center rounded-lg bg-blue-100 p-4 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200"
-					>
-						<svelte:component this={CheckCircleIcon} class="mr-3 h-5 w-5 flex-shrink-0" />
-						<div>{contextMessage}</div>
+	<Tabs tabs={TABS} {activeTabId} onTabChange={(id) => (activeTabId = id)}>
+		{#snippet content(id)}
+			{#if id === 'media'}
+				<div class="pt-8">
+					<div class="sticky top-4 z-30 mb-8">
+						<!-- 3. SIMPLIFIED: The Search component no longer needs any props. -->
+						<Search />
 					</div>
-				{/if}
 
-				<!-- Results Grid -->
-				{#if searchResults.results.items.length > 0}
-					<h2 class="mb-4 text-2xl font-semibold text-gray-800 dark:text-white">
-						Found {searchResults.results.total} results
-					</h2>
-					<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-						{#each searchResults.results.items as item (item.id + '-' + (item.scene_id || ''))}
-							<Card {...item} />
-						{/each}
-					</div>
-				{:else}
-					<div
-						class="flex h-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center text-gray-500 dark:border-gray-600"
-					>
-						<h3 class="text-xl font-semibold">No Similar Items Found</h3>
-						<p class="mt-2">Try uploading a different image.</p>
-					</div>
-				{/if}
-			</div>
-		{:else}
-			<!-- Initial state before any search is performed -->
-			<div
-				class="flex h-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center text-gray-500 dark:border-gray-600"
-			>
-				<h3 class="text-xl font-semibold">Search Results Will Appear Here</h3>
-				<p class="mt-2">Upload an image and click "Search" to begin.</p>
-			</div>
-		{/if}
-	</div>
+					<!-- Folder Grid -->
+					{#if folders && folders.length > 0}
+						<h2 class="mb-4 text-2xl font-semibold text-gray-800 dark:text-white">Folders</h2>
+						<div class="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+							{#each folders as folder (folder.id)}
+								<a
+									href={`/search?folder_id=${folder.id}&mode=directory`}
+									class="flex flex-col items-center gap-2 rounded-lg p-4 text-center text-gray-600 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+								>
+									<svg
+										class="h-16 w-16 text-yellow-500"
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+									>
+										<path
+											d="M4 4C4 3.44772 4.44772 3 5 3H9.58579C9.851 3 10.1054 3.10536 10.2929 3.29289L12 5H19C19.5523 5 20 5.44772 20 6V18C20 18.5523 19.5523 19 19 19H5C4.44772 19 4 18.5523 4 18V4Z"
+										/>
+									</svg>
+									<span class="font-medium break-all">{folder.name}</span>
+								</a>
+							{/each}
+						</div>
+					{/if}
+
+					<!-- Results Section -->
+					{#if items.length > 0}
+						<h2 class="mb-4 text-2xl font-semibold text-gray-800 dark:text-white">Files</h2>
+						<MasonryGrid {items} gap={24} minColumnWidth={280}>
+							{#snippet item(cardItem)}
+								<Card {...cardItem} />
+							{/snippet}
+						</MasonryGrid>
+					{:else if folders && folders.length > 0}
+						<div
+							class="flex h-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center text-gray-500 dark:border-gray-600"
+						>
+							<h3 class="text-xl font-semibold">No Files Here</h3>
+							<p class="mt-2">This folder is empty. Select a subfolder to continue browsing.</p>
+						</div>
+					{:else if !isLoadingMore}
+						<!-- This message now correctly shows when the load function returns no results -->
+						<div
+							class="flex h-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center text-gray-500 dark:border-gray-600"
+						>
+							<h3 class="text-xl font-semibold">No Results Found</h3>
+							<p class="mt-2">Try adjusting your search terms or filters.</p>
+						</div>
+					{/if}
+
+					<!-- Load More Button -->
+					{#if nextCursor}
+						<div class="mt-12 text-center">
+							<button
+								onclick={loadMore}
+								disabled={isLoadingMore}
+								class="rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+							>
+								{isLoadingMore ? 'Loading...' : 'Load More'}
+							</button>
+						</div>
+					{/if}
+				</div>
+			{:else if id === 'image'}
+				<div class="pt-8">
+					<ReverseImageSearch />
+				</div>
+			{/if}
+		{/snippet}
+	</Tabs>
 </div>

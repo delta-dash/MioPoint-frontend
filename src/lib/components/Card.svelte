@@ -1,8 +1,9 @@
 <!-- src/lib/components/Card.svelte -->
 <script lang="ts">
+	// This component is designed to display a file instance.
+	// It can be a regular file from a listing, or a result from a reverse image search.
 	import { goto, preloadData, pushState } from '$app/navigation';
 
-	// --- Component Properties ---
 	const {
 		id,
 		scene_id = null,
@@ -19,14 +20,17 @@
 		class?: string;
 	} = $props();
 
-	// --- Derived Values ---
-	const thumbnailUrl = scene_id ? `/api/scene/${scene_id}/thumbnail` : `/api/${id}/thumbnail`;
-	const detailUrl = `/file/${id}`;
-	const similarityPercent = similarity ? (parseFloat(similarity) * 100).toFixed(1) + '%' : null;
+	// --- CORRECTED THUMBNAIL URL ---
+	// The backend route for instance thumbnails is now /api/instance/{instance_id}/thumbnail.
+	// The scene thumbnail route is assumed to be /api/scene/{scene_id}/thumbnail for now,
+	// as it appears to be used by the reverse image search results.
+	const thumbnailUrl = scene_id
+		? `/api/scene/${scene_id}/thumbnail`
+		: `/api/instance/${id}/thumbnail`;
 
-	/**
-	 * Handles clicks to open the file in the modal view.
-	 */
+	const detailUrl = scene_id ? `/file/${id}?scene=${scene_id}` : `/file/${id}`;
+
+	const similarityPercent = similarity ? (parseFloat(similarity) * 100).toFixed(1) + '%' : null;
 	async function loadFileData(e: MouseEvent) {
 		const target = e.currentTarget as HTMLAnchorElement;
 
@@ -59,21 +63,7 @@
 	<div
 		class="flex h-full flex-col overflow-hidden rounded-xl bg-white shadow-md transition-all group-hover:-translate-y-1 group-hover:shadow-xl dark:bg-gray-800"
 	>
-		<!--
-      THE FIX: Key Changes Below
-      1. Replaced `aspect-video` with a FIXED HEIGHT class like `h-56` (224px).
-         You can change this to `h-48` (192px), `h-64` (256px), etc. to get the size you want.
-      2. Added `flex items-center justify-center` to perfectly center the image
-         inside this new fixed-height container.
-    -->
-		<div
-			class="card-frame flex w-full items-center justify-center bg-white p-2 dark:bg-gray-800"
-		>
-			<!--
-        3. The `object-contain` is now correct. It will ensure the image fits
-           without being cropped, and the parent's flex properties will handle the alignment.
-        4. The `h-full` and `w-full` on the image now mean "be at MOST the full size of the container".
-      -->
+		<div class="card-frame flex w-full items-center justify-center bg-white sm:p-0 p-2 dark:bg-gray-800">
 			<img
 				class="h-full w-full rounded-md object-contain"
 				src={thumbnailUrl}
@@ -86,18 +76,10 @@
 	<!-- Similarity Badge (Overlay) -->
 	{#if similarityPercent}
 		<div
-			class="absolute top-2 right-2 rounded-full bg-green-600/90 px-3 py-1 text-sm font-bold text-white shadow-lg"
+			class="absolute right-2 top-2 rounded-full bg-green-600/90 px-3 py-1 text-sm font-bold text-white shadow-lg"
 			title="Similarity Score"
 		>
 			{similarityPercent}
 		</div>
 	{/if}
 </a>
-
-<style>
-	.card-frame {
-		/* Use the variable defined by the parent, or default to 16rem (256px) */
-		height: var(--card-frame-height, 16rem);
-		transition: height 0.2s ease-in-out; /* Optional: smooth height transition */
-	}
-</style>

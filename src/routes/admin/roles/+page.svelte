@@ -4,14 +4,18 @@
 	import Modal from '$lib/components/Modal.svelte';
 
 	// --- PROPS ---
-	const { data }: { data: { allRoles: Role[]; initialRoleId: number | null , allPermissions:RolePermissions[] } } = $props();
-	
+	const {
+		data
+	}: {
+		data: { allRoles: Role[]; initialRoleId: number | null; allPermissions: RolePermissions[] };
+	} = $props();
+
 	// --- STATE MANAGEMENT (Svelte 5 Runes) ---
 
 	// State for the main editor
 	// *** THIS IS THE FIX ***
 	// Initialize the state directly from the data provided by the `load` function.
-	let selectedRoleId = $state<number | null>(data.initialRoleId); 
+	let selectedRoleId = $state<number | null>(data.initialRoleId);
 	let selectedRole = $state<RoleDetail | null>(null);
 	let loadingState = $state({
 		permissions: false,
@@ -38,13 +42,16 @@
 	let isDeleting = $state(false);
 	let deleteError = $state<string | null>(null);
 
-
 	// --- LOGIC / FUNCTIONS ---
-	
+
 	// Function to handle selecting a role
-	function selectRole(role: {id: number, name: string}) {
+	function selectRole(role: { id: number; name: string }) {
 		selectedRoleId = role.id;
-		goto(`?role=${encodeURIComponent(role.name)}`, { replaceState: true, keepFocus: true, noScroll: true });
+		goto(`?role=${encodeURIComponent(role.name)}`, {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
 	}
 
 	// Effect to synchronize state FROM the URL for back/forward navigation
@@ -52,7 +59,7 @@
 	$effect(() => {
 		const roleNameFromUrl = $page.url.searchParams.get('role');
 		if (roleNameFromUrl) {
-			const role = data.allRoles.find(r => r.name === roleNameFromUrl);
+			const role = data.allRoles.find((r) => r.name === roleNameFromUrl);
 			if (role && role.id !== selectedRoleId) {
 				selectedRoleId = role.id;
 			} else if (!role) {
@@ -105,7 +112,7 @@
 			selectedRole.permissions = selectedRole.permissions.filter((p) => p.id !== permission.id);
 		}
 	}
-	
+
 	// Handles creating a new role via the modal form
 	async function handleCreateRole(e: SubmitEvent) {
 		e.preventDefault();
@@ -135,7 +142,7 @@
 
 	// Handles saving edits to the currently selected role
 	async function handleSave(e: SubmitEvent) {
-		e.preventDefault()
+		e.preventDefault();
 		if (!selectedRole) return;
 		isSaving = true;
 		errorState.save = null;
@@ -155,14 +162,18 @@
 				throw new Error(errorData.detail || 'Failed to save changes.');
 			}
 			await invalidateAll();
-			goto(`?role=${encodeURIComponent(selectedRole.name)}`, { replaceState: true, keepFocus: true, noScroll: true });
+			goto(`?role=${encodeURIComponent(selectedRole.name)}`, {
+				replaceState: true,
+				keepFocus: true,
+				noScroll: true
+			});
 		} catch (e: any) {
 			errorState.save = e.message;
 		} finally {
 			isSaving = false;
 		}
 	}
-	
+
 	// Handles deleting the currently selected role after confirmation
 	async function handleDeleteRole() {
 		if (!selectedRole) return;
@@ -177,9 +188,10 @@
 				throw new Error(errorData.detail || 'Failed to delete role.');
 			}
 			showDeleteModal = false;
-			selectedRoleId = null;
-			goto('?', { replaceState: true, keepFocus: true, noScroll: true });
-			await invalidateAll();
+			// Navigate to the base URL. This will cause the load function to re-run
+			// with no `?role` parameter, and the component will re-initialize
+			// with the fresh data from the new `data` prop.
+			await goto('?', { replaceState: true, keepFocus: true, noScroll: true });
 		} catch (e: any) {
 			deleteError = e.message;
 		} finally {
@@ -224,7 +236,7 @@
 			<div class="mt-4 border-t pt-4">
 				<button
 					onclick={() => (showCreateModal = true)}
-					class="inline-flex w-full justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+					class="inline-flex w-full justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
 				>
 					+ Create New Role
 				</button>
@@ -317,7 +329,7 @@
 						<button
 							type="button"
 							onclick={() => (showDeleteModal = true)}
-							class="inline-flex justify-center rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:outline-none"
+							class="inline-flex justify-center rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
 						>
 							Delete Role
 						</button>
@@ -328,7 +340,7 @@
 							<button
 								type="submit"
 								disabled={isSaving}
-								class="inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-400"
+								class="inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-gray-400"
 							>
 								{isSaving ? 'Saving...' : 'Save Changes'}
 							</button>
@@ -378,7 +390,7 @@
 		<button
 			type="button"
 			onclick={() => (showCreateModal = false)}
-			class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:outline-none"
+			class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
 		>
 			Cancel
 		</button>
@@ -386,7 +398,7 @@
 			type="submit"
 			form="create-role-form"
 			disabled={isCreating}
-			class="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-400"
+			class="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-gray-400"
 		>
 			{isCreating ? 'Creating...' : 'Create Role'}
 		</button>
@@ -409,7 +421,7 @@
 		<button
 			type="button"
 			onclick={() => (showDeleteModal = false)}
-			class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:outline-none"
+			class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
 		>
 			Cancel
 		</button>
@@ -417,7 +429,7 @@
 			type="button"
 			onclick={handleDeleteRole}
 			disabled={isDeleting}
-			class="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-400"
+			class="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-gray-400"
 		>
 			{isDeleting ? 'Deleting...' : 'Confirm Delete'}
 		</button>

@@ -2,7 +2,7 @@
 <script lang="ts">
 	import { fetchWithAuth } from '$lib/services/authapi';
 	import Modal from '$lib/components/Modal.svelte';
-	import { slide } from 'svelte/transition';
+	import FeedbackToast from '$lib/components/FeedbackToast.svelte';
 	import { untrack } from 'svelte';
 
 	// --- Component State ---
@@ -18,7 +18,7 @@
 	// --- Tag Action State ---
 	let tagActionType: 'tags' | 'meta_tags' = $state('tags');
 	let tagBasedSelectedRoleId: number | undefined = $state();
-	let selectedTagNames: string[] = $state([]);
+	let selectedTagIds: number[] = $state([]);
 	let tagSearchTerm = $state(''); // New: State for the tag search input
 
 	// --- Modal State ---
@@ -32,6 +32,13 @@
 	// --- Derived State ---
 	const globalRole = $derived(allRoles.find((r) => r.id === globalSelectedRoleId));
 	const tagBasedRole = $derived(allRoles.find((r) => r.id === tagBasedSelectedRoleId));
+	const selectedTags = $derived(
+		(tagActionType === 'tags' ? allTags : allMetaTags).filter((tag) =>
+			selectedTagIds.includes(tag.id)
+		)
+	);
+	const selectedTagNames = $derived(selectedTags.map((tag) => tag.name));
+
 	// New: Derived state for filtered tags based on the search term
 	const filteredTags = $derived(
 		allTags.filter((tag) => tag.name.toLowerCase().includes(tagSearchTerm.toLowerCase()))
@@ -70,7 +77,7 @@
 		tagActionType;
 		// Reset selected tags and search when switching between 'tags' and 'meta_tags'
 		untrack(() => {
-			selectedTagNames = [];
+			selectedTagIds = [];
 			tagSearchTerm = '';
 		});
 	});
@@ -111,7 +118,7 @@
 			'Confirm Global Role Addition',
 			`Are you sure you want to add the role "${globalRole.name}" to the visibility list of ALL files? This action affects every file in the system.`,
 			async () => {
-				await fetchWithAuth('/api/files/visibility/global', {
+				await fetchWithAuth('/api/instances/visibility/global', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 
@@ -128,7 +135,7 @@
 			'Confirm Global Role Removal',
 			`Are you sure you want to remove the role "${globalRole.name}" from the visibility list of ALL files? This could restrict access for many users.`,
 			async () => {
-				await fetchWithAuth('/api/files/visibility/global', {
+				await fetchWithAuth('/api/instances/visibility/global', {
 					method: 'DELETE',
 					headers: { 'Content-Type': 'application/json' },
 
@@ -140,7 +147,7 @@
 	}
 
 	function prepareTagBasedAction(action: 'add' | 'remove') {
-		if (!tagBasedRole || selectedTagNames.length === 0) return;
+		if (!tagBasedRole || selectedTagIds.length === 0) return;
 
 		const actionText = action === 'add' ? 'add' : 'remove';
 		const method = action === 'add' ? 'POST' : 'DELETE';
@@ -149,21 +156,21 @@
 			`Confirm Tag-Based Role ${actionText === 'add' ? 'Addition' : 'Removal'}`,
 			`Are you sure you want to ${actionText} the role "${tagBasedRole.name}" for all files tagged with: ${selectedTagNames.join(', ')}?`,
 			async () => {
-				await fetchWithAuth(`/api/files/visibility/by-tag`, {
+				await fetchWithAuth(`/api/instances/visibility/by-tag`, {
 					method,
 					headers: { 'Content-Type': 'application/json' },
 
 					body: JSON.stringify({
 						role_id: tagBasedRole.id,
-						tags: selectedTagNames,
+						tags: selectedTagIds,
 						tag_type: tagActionType
 					})
 				});
 				setFeedback(
 					'success',
-					`Successfully performed action for role "${tagBasedRole.name}" on ${selectedTagNames.length} tag(s).`
+					`Successfully performed action for role "${tagBasedRole.name}" on ${selectedTagIds.length} tag(s).`
 				);
-				selectedTagNames = []; // Clear selection on success
+				selectedTagIds = []; // Clear selection on success
 			}
 		);
 	}
@@ -280,8 +287,8 @@
 								>
 									<input
 										type="checkbox"
-										bind:group={selectedTagNames}
-										value={tag.name}
+										bind:group={selectedTagIds}
+										value={tag.id}
 										class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
 									/>
 									<span class="text-sm text-gray-800">{tag.name}</span>
@@ -303,8 +310,8 @@
 								>
 									<input
 										type="checkbox"
-										bind:group={selectedTagNames}
-										value={tag.name}
+										bind:group={selectedTagIds}
+										value={tag.id}
 										class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
 									/>
 									<span class="text-sm text-gray-800">{tag.name}</span>
@@ -350,7 +357,7 @@
 							<button
 								onclick={() => prepareTagBasedAction('add')}
 								disabled={!tagBasedSelectedRoleId ||
-									selectedTagNames.length === 0 ||
+									selectedTagIds.length === 0 ||
 									isLoading.action}
 								class="flex-grow justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-400"
 							>
@@ -359,7 +366,7 @@
 							<button
 								onclick={() => prepareTagBasedAction('remove')}
 								disabled={!tagBasedSelectedRoleId ||
-									selectedTagNames.length === 0 ||
+									selectedTagIds.length === 0 ||
 									isLoading.action}
 								class="flex-grow justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-400"
 							>
@@ -373,22 +380,7 @@
 	{/if}
 </div>
 
-<!-- Feedback "Toast" Notification -->
-{#if feedback}
-	<div
-		transition:slide={{ duration: 300 }}
-		class="fixed right-4 bottom-4 z-50 max-w-sm rounded-lg p-4 text-sm font-medium shadow-lg"
-		class:bg-red-100={feedback.type === 'error'}
-		class:text-red-800={feedback.type === 'error'}
-		class:border-red-300={feedback.type === 'error'}
-		class:bg-green-100={feedback.type === 'success'}
-		class:text-green-800={feedback.type === 'success'}
-		class:border-green-300={feedback.type === 'success'}
-		role="alert"
-	>
-		{feedback.message}
-	</div>
-{/if}
+<FeedbackToast {feedback} />
 
 <!-- Confirmation Modal -->
 <Modal open={isModalOpen} onClose={() => (isModalOpen = false)} title={modalContent.title}>

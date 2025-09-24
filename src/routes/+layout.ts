@@ -26,4 +26,4 @@ export const load: LayoutLoad = async ({ fetch }) => {
 		user: get(user)
 	};
 };
-export const prerender = true;
+export const ssr = false;

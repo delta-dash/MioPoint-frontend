@@ -15,5 +15,7 @@ export default defineConfig({
 				ws: true,
 			}
 		}
+	},
+	build: { emptyOutDir: true
 	}
 });

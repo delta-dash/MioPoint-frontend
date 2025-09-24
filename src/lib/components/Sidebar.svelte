@@ -1,5 +1,5 @@
 <!-- src/Sidebar.svelte -->
-<script>
+<script lang="ts">
 	// Svelte 5 Imports
 	import {
 		Home,
@@ -15,6 +15,7 @@
 		LayoutGrid,
 		Eye
 	} from 'lucide-svelte';
+	import PartyIndicator from '$lib/components/PartyIndicator.svelte';
 	import { user } from '$lib/userstore';
 
 	let collapsed = $state(false);
@@ -26,7 +27,8 @@
 		{ name: 'Tag', icon: Tag, path: '/admin/tag', permission: 'tag:edit' },
 		{ name: 'Roles', icon: Badge, path: '/admin/roles', permission: 'user:manage_roles' },
 		{ name: 'Users', icon: UserCog, path: '/admin/users', permission: 'user:view_any' },
-		{ name: 'Visibility', icon: Eye, path: '/admin/visibility', permission: 'file:edit' }
+		{ name: 'Visibility', icon: Eye, path: '/admin/visibility', permission: 'file:edit' },
+		{ name: 'Status', icon: Eye, path: '/admin/status', permission: 'file:view' }
 
 		//{ name: 'Analytics', icon: BarChart2, path: '/' },
 		//{ name: 'Settings', icon: Settings, path: '/' }
@@ -93,6 +95,9 @@
 
 	<!-- This container pushes everything below it to the bottom -->
 	<div class="mt-auto space-y-2">
+		<!-- Docked Party Indicator -->
+		<PartyIndicator docked={true} priority={1} />
+
 		<!-- User Info Section -->
 		<div
 			class="rounded-lg bg-gray-200 transition-all duration-300 dark:bg-gray-700"

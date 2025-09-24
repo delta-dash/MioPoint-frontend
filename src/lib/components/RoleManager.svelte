@@ -20,7 +20,7 @@
 	}: {
 		roles: Role[]; // UPDATED: Now expects an array of Role objects
 		entityId: number;
-		entityType: 'user' | 'file';
+		entityType: 'user' | 'instance';
 		canRemove?: boolean;
 		canAdd?: boolean;
 		canEdit?: boolean;
@@ -135,7 +135,7 @@
 		const role_ids = newRoles.map((r) => r.id);
 
 		try {
-			await fetchWithAuth(`/api/file/${entityId}/visibility`, {
+			await fetchWithAuth(`/api/${entityType}/${entityId}/visibility`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ role_ids })
@@ -154,7 +154,7 @@
 		if (isLoading) return;
 
 		// MODIFIED: Handle file role assignment
-		if (entityType === 'file') {
+		if (entityType === 'instance') {
 			const newRole = allSystemRoles.find((r) => r.id === roleId);
 			if (newRole && !localRoles.some((r) => r.id === newRole.id)) {
 				const newRolesList = [...localRoles, newRole];
@@ -184,7 +184,7 @@
 		if (isLoading) return;
 
 		// MODIFIED: Handle file role removal
-		if (entityType === 'file') {
+		if (entityType === 'instance') {
 			const newRolesList = localRoles.filter((r) => r.id !== roleToRemove.id);
 			await updateFileRoles(newRolesList);
 			return;
@@ -309,7 +309,7 @@
 						<div
 							style={dropdownStyle}
 							use:clickOutside={() => (showRolePicker = false)}
-							class="ring-opacity-5 w-56 rounded-md bg-white shadow-lg ring-1 ring-black focus:outline-none"
+							class="w-56 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
 							role="menu"
 							aria-orientation="vertical"
 						>
@@ -417,7 +417,7 @@
 			type="submit"
 			form="create-role-form"
 			disabled={isLoading || !newRole.name.trim()}
-			class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-400"
+			class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-gray-400"
 		>
 			{isLoading ? 'Processing...' : 'Create & Assign'}
 		</button>

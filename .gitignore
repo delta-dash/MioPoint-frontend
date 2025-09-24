@@ -8,7 +8,7 @@ node_modules
 .wrangler
 /.svelte-kit
 /build
-
+src/routes/test
 # OS
 .DS_Store
 Thumbs.db

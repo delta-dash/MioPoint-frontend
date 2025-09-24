@@ -1,16 +1,32 @@
 <!-- src/lib/components/Chat/ThreadMessaging.svelte -->
 <script lang="ts">
 	import { wsStore } from '$lib/wsStore';
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { fetchWithAuth } from '$lib/services/authapi';
 
 	// --- Props ---
-	let { threadId, context='thread' }: { threadId: number, context?: 'thread'|'party' } = $props();
+	let { threadId, context = 'thread' }: { threadId: number; context?: 'thread' | 'party' } =
+		$props();
 
 	// --- Types ---
-	interface Post { id: number; content: string; created_at: string; sender_id: number; sender_username: string; replies: Post[]; }
-	interface Participant { id: number; username: string; role: 'owner' | 'member'; }
-	interface ThreadDetails { id: number; name: string; type: string; }
+	interface Post {
+		id: number;
+		content: string;
+		created_at: string;
+		sender_id: number;
+		sender_username: string;
+		replies: Post[];
+	}
+	interface Participant {
+		id: number;
+		username: string;
+		role: 'owner' | 'member';
+	}
+	interface ThreadDetails {
+		id: number;
+		name: string;
+		type: string;
+	}
 
 	// --- Internal Reactive State ---
 	let messages = $state<Post[]>([]);
@@ -29,7 +45,9 @@
 			const details = await fetchWithAuth<ThreadDetails>(`/api/chat/threads/${id}/details`);
 			threadDetails = details;
 			if (details) newThreadName = details.name;
-		} catch (error) { console.error('Error fetching thread details:', error); }
+		} catch (error) {
+			console.error('Error fetching thread details:', error);
+		}
 	}
 
 	async function fetchMessageHistory(id: number) {
@@ -44,18 +62,22 @@
 		}
 	}
 
-	async function fetchParticipants(id: number) {
+	async function fetchParticipants(id: number, currentUserId: number | null) {
 		try {
 			const memberData = await fetchWithAuth<Participant[]>(`/api/chat/threads/${id}/members`);
 			participants = memberData || [];
-			const currentUser = participants.find((p) => p.id === $wsStore.userId);
+			if (currentUserId === null) {
+				amOwner = false;
+				return;
+			}
+			const currentUser = participants.find((p) => p.id === currentUserId);
 			amOwner = currentUser?.role === 'owner';
 		} catch (error) {
 			console.error('Error fetching participants:', error);
 			participants = [];
 		}
 	}
-	
+
 	async function updateThreadName(e: SubmitEvent) {
 		e.preventDefault();
 		if (!newThreadName.trim() || newThreadName === threadDetails?.name) {
@@ -81,8 +103,9 @@
 	function sendChatMessage(e: SubmitEvent) {
 		e.preventDefault();
 		if (chatInput.trim() === '') return;
+		const messageType = context === 'party' ? 'send_message_to_party' : 'send_message_to_thread';
 		wsStore.sendMessage({
-			type: 'send_message_to_'+context,
+			type: messageType,
 			payload: { content: chatInput, thread_id: threadId }
 		});
 		chatInput = '';
@@ -90,7 +113,7 @@
 
 	function transferOwnership(newOwnerId: number) {
 		wsStore.sendMessage({
-			type: `transfer_ownership_in_${context}`,
+			type: 'transfer_ownership_in_thread', // Use the generic thread handler
 			payload: {
 				thread_id: threadId,
 				new_owner_id: newOwnerId
@@ -100,7 +123,7 @@
 
 	function banUser(userId: number) {
 		wsStore.sendMessage({
-			type: `ban_user_from_${context}`,
+			type: 'ban_user_from_thread', // Use the generic thread handler
 			payload: {
 				thread_id: threadId,
 				banned_user_id: userId
@@ -108,75 +131,97 @@
 		});
 	}
 
-
 	// --- Effects & Lifecycle (Corrected) ---
-	$effect(() => {
+	$effect.root(() => {
+		// This effect should only re-run when `threadId` changes.
 		const currentThreadId = threadId;
 
-		isLoading = true;
-		messages = [];
-		participants = [];
-		threadDetails = null;
-		amOwner = false;
+		// If there's no thread ID, there's nothing to do.
+		if (!currentThreadId) {
+			// Clear out old data if the component remains mounted without a threadId
+			messages = [];
+			participants = [];
+			threadDetails = null;
+			amOwner = false;
+			return;
+		}
 
-		async function initializeData() {
+		// Define an async function to load all data for the new thread.
+		// This keeps the async logic cleanly separated.
+		const loadThreadData = async () => {
+			isLoading = true;
+			// Reset state for the new thread
+			messages = [];
+			participants = [];
+			threadDetails = null;
+			amOwner = false;
+
+			// Use `untrack` to get the user ID without creating a dependency on the wsStore.
+			// This is crucial to prevent this effect from re-running on every new message.
+			const currentUserId = untrack(() => $wsStore.userId);
+
+			// Fetch all data in parallel.
 			await Promise.all([
 				fetchThreadDetails(currentThreadId),
 				fetchMessageHistory(currentThreadId),
-				fetchParticipants(currentThreadId)
+				fetchParticipants(currentThreadId, currentUserId)
 			]);
-		}
+			// `isLoading` is set to false inside `fetchMessageHistory`'s finally block.
+		};
 
-		initializeData();
-
+		// Execute the data loading and subscribe to updates.
+		loadThreadData();
 		wsStore.sendMessage({
 			type: 'subscribe_to_thread_updates',
 			payload: { thread_id: currentThreadId }
 		});
-		
-		const unsubscribeWs = wsStore.subscribe((store) => {
-			if (!store.lastMessage) return;
-			const { type, payload } = store.lastMessage;
 
-			if (!payload || payload.thread_id !== currentThreadId) {
-				return;
-			}
-
-			switch (type) {
-				case 'new_chat_message':
-					if (!messages.some((msg) => msg.id === payload.id)) {
-						messages = [...messages, payload];
-					}
-					break;
-				case 'thread_posts_updated':
-					messages = payload.posts || [];
-					break;
-				case 'thread_members_updated':
-					participants = payload.members || [];
-					const currentUser = participants.find((p) => p.id === $wsStore.userId);
-					amOwner = currentUser?.role === 'owner';
-					break;
-				case 'thread_details_updated':
-					if (threadDetails) {
-						threadDetails.name = payload.name;
-					}
-					break;
-				case 'user_joined_thread':
-				case 'user_left_thread':
-				case 'ownership_transferred':
-				case 'user_banned':
-					fetchParticipants(currentThreadId);
-					break;
-			}
-		});
-
+		// The cleanup function will run when `threadId` changes or the component unmounts.
 		return () => {
 			wsStore.sendMessage({
 				type: 'unsubscribe_from_thread_updates',
 				payload: { thread_id: currentThreadId }
 			});
-			unsubscribeWs();
 		};
+	});
+
+	// This separate effect handles incoming messages without re-triggering the subscription.
+	$effect(() => {
+		const message = $wsStore.lastMessage;
+		const currentUserId = $wsStore.userId;
+		if (!message || message.payload?.thread_id !== threadId) {
+			return;
+		}
+
+		const { type, payload } = message;
+
+		switch (type) {
+			case 'new_chat_message':
+				if (!messages.some((msg) => msg.id === payload.id)) {
+					messages = [...messages, payload];
+				}
+				break;
+			case 'thread_posts_updated':
+				messages = payload.posts || [];
+				break;
+			case 'thread_members_updated':
+				participants = payload.members || [];
+				const currentUser = participants.find((p) => p.id === currentUserId);
+				amOwner = currentUser?.role === 'owner';
+				break;
+			case 'thread_details_updated':
+				if (threadDetails) {
+					threadDetails.name = payload.name;
+				}
+				break;
+			case 'user_joined_thread':
+			case 'user_left_thread':
+			case 'ownership_transferred':
+			case 'user_banned':
+			case 'ownership_changed_broadcast':
+				fetchParticipants(threadId, currentUserId);
+				break;
+		}
 	});
 
 	$effect(() => {
@@ -188,7 +233,6 @@
 			});
 		}
 	});
-
 </script>
 
 <div class="grid h-[600px] grid-cols-1 gap-6 md:grid-cols-3">

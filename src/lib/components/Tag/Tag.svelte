@@ -1,15 +1,18 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { fetchWithAuth } from '$lib/services/authapi';
 
 	// --- Props ---
 	const {
 		tags,
 		fileId,
+		tagType,
 		canRemove = true, // Provide sensible defaults
 		canAdd = true
 	}: {
 		tags: string[];
 		fileId: string | number;
+		tagType: TagType;
 		canRemove?: boolean;
 		canAdd?: boolean;
 	} = $props();
@@ -38,14 +41,14 @@
 		errorMessage = '';
 
 		try {
-			const response = await fetch(`/api/tag/remove/${fileId}/${encodeURIComponent(tagToRemove)}`, {
-				method: 'DELETE'
+			// The backend expects a DELETE request to the instance endpoint with the tag in the body.
+			await fetchWithAuth(`/api/tags/${tagType}/instance/${fileId}`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tags: [tagToRemove] })
 			});
 
-			if (!response.ok) {
-				throw new Error('Failed to remove tag.');
-			}
-
+			// fetchWithAuth throws on error, so if we get here, it was successful.
 			// Optimistically update the UI
 			localTags = localTags.filter((t) => t !== tagToRemove);
 		} catch (error) {
@@ -57,12 +60,12 @@
 		}
 	}
 
-	async function handleAddTag(event:Event) {
-        event.preventDefault();
+	async function handleAddTag(event: Event) {
+		event.preventDefault();
 		const trimmedTag = newTagValue.trim();
 		if (!trimmedTag || isLoading) return;
 
-		if (localTags.map(t => t.toLowerCase()).includes(trimmedTag.toLowerCase())) {
+		if (localTags.map((t) => t.toLowerCase()).includes(trimmedTag.toLowerCase())) {
 			errorMessage = `Tag "${trimmedTag}" already exists.`;
 			return;
 		}
@@ -71,16 +74,14 @@
 		errorMessage = '';
 
 		try {
-			// Using POST is more appropriate for adding data.
-			// The tag could be sent in the body for more complex scenarios.
-			const response = await fetch(`/api/tag/add/${fileId}/${encodeURIComponent(trimmedTag)}`, {
-				method: 'POST'
+			// The backend expects a POST to the instance endpoint with the tag in the body.
+			await fetchWithAuth(`/api/tags/${tagType}/instance/${fileId}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tags: [trimmedTag] })
 			});
 
-			if (!response.ok) {
-				throw new Error('Failed to add tag.');
-			}
-
+			// fetchWithAuth throws on error, so if we get here, it was successful.
 			// Optimistically update UI and reset the form
 			localTags.push(trimmedTag);
 			localTags.sort(); // Optional: keep tags sorted
@@ -166,8 +167,17 @@
 					aria-label="Confirm add tag"
 				>
 					<!-- Checkmark Icon -->
-					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-						<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="h-4 w-4"
+						viewBox="0 0 20 20"
+						fill="currentColor"
+					>
+						<path
+							fill-rule="evenodd"
+							d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+							clip-rule="evenodd"
+						/>
 					</svg>
 				</button>
 				<button
@@ -178,8 +188,17 @@
 					aria-label="Cancel adding tag"
 				>
 					<!-- Close Icon -->
-					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-						<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.693a1 1 0 010-1.414z" clip-rule="evenodd" />
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						class="h-4 w-4"
+						viewBox="0 0 20 20"
+						fill="currentColor"
+					>
+						<path
+							fill-rule="evenodd"
+							d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.693a1 1 0 010-1.414z"
+							clip-rule="evenodd"
+						/>
 					</svg>
 				</button>
 			</form>
@@ -190,8 +209,17 @@
 				disabled={isLoading}
 				class="flex items-center gap-1 rounded-full border border-dashed border-gray-400 px-2.5 py-1 text-xs font-medium text-gray-600 transition hover:border-gray-600 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
 			>
-				<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-					<path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-3 w-3"
+					viewBox="0 0 20 20"
+					fill="currentColor"
+				>
+					<path
+						fill-rule="evenodd"
+						d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+						clip-rule="evenodd"
+					/>
 				</svg>
 				Add Tag
 			</button>

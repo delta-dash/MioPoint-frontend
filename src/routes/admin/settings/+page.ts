@@ -13,7 +13,7 @@ export const load: PageLoad = async ({ fetch, parent }) => {
         if (!response.ok) {
             throw error(response.status, `Failed to load configuration: ${response.statusText}`);
         }
-        const configSchema = await response.json();
+        const configSchema: ConfigSchemaItem[] = await response.json();
         return { configSchema };
     } catch (e) {
         console.error('Error loading config:', e);

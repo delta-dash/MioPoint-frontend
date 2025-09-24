@@ -91,6 +91,7 @@
 
 <!-- The modal, which only appears when isViewerOpen is true -->
 {#if isViewerOpen}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		id="media-viewer-modal"
 		bind:this={modalElement}
@@ -100,6 +101,7 @@
 		aria-modal="true"
 		tabindex="-1"
 	>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="relative inline-block" onclick={(e) => e.stopPropagation()}>
 			{#key resetKey}
 				<img
